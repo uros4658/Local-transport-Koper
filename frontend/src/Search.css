@@ -1,0 +1,79 @@
+/* Search.css */
+
+body {
+    margin: 0;
+    font-family: 'Arial', sans-serif;
+    background: #000; /* Set background to black */
+  }
+  
+  .Search {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    color: white;
+  }
+  
+  h1 {
+    font-size: 32px;
+    margin-bottom: 20px;
+  }
+  
+  label {
+    display: block;
+    font-size: 16px;
+    font-weight: 600;
+    margin: 15px 0 5px;
+  }
+  
+  select, input {
+    width: 300px;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 5px;
+    font-size: 14px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    appearance: none; /* Remove default dropdown arrow */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+  }
+  
+  select {
+    background-image: url('data:image/svg+xml;utf8,<svg fill="%23fff" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+    background-repeat: no-repeat;
+    background-position-x: 100%;
+    background-position-y: 50%;
+    padding-right: 30px; /* Add space for the dropdown arrow */
+  }
+  
+  select option {
+    background: #333;
+    color: white;
+  }
+  
+  button {
+    width: 320px;
+    padding: 10px;
+    border: none;
+    border-radius: 5px;
+    background: #1845ad;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 20px;
+    transition: background 0.3s ease;
+  }
+  
+  button:hover {
+    background: #23a2f6;
+  }
+  
+  iframe {
+    margin-top: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+  }
+  
