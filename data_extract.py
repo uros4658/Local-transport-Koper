@@ -44,8 +44,36 @@ def extract_tables_from_pdf(pdf_path):
     return odd_tables, even_tables
 
 def filter_table(table):
-    # Filter out any rows containing 'D'
-    return [row for row in table if 'D' not in row]
+    # Filter out any rows containing 'D' or specific sentences
+    return [row for row in table if 'D' not in row and not re.match(r'.*Režim obratovanja.*', row) and not re.match(r'^\d{3,}$', row)]
+
+def format_table_for_csv(table):
+    formatted_table = []
+    for row in table:
+        # Replace incorrectly split station names
+        row = row.replace(",ulica,", " ulica,").replace(",K,", " K,")
+        
+        # Split the row by whitespace to create columns, handling special cases
+        formatted_row = re.split(r'\s+', row)
+        formatted_row = split_time_entries(formatted_row)
+        
+        # Remove large numbers that do not fit the time format
+        formatted_row = [entry for entry in formatted_row if not re.match(r'^\d{3,}$', entry)]
+        
+        formatted_table.append(formatted_row)
+    return formatted_table
+
+def split_time_entries(row):
+    # Helper function to split concatenated time entries
+    new_row = []
+    for entry in row:
+        # Split concatenated times like 6:306:507:10 into individual entries
+        new_entry = re.findall(r'\d{1,2}:\d{2}', entry)
+        if new_entry:
+            new_row.extend(new_entry)
+        else:
+            new_row.append(entry)
+    return new_row
 
 def write_combined_tables_to_csv(odd_tables, even_tables, file_path):
     # Combine odd and even tables
@@ -55,8 +83,9 @@ def write_combined_tables_to_csv(odd_tables, even_tables, file_path):
     with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
         csvwriter = csv.writer(csvfile)
         for table in combined_tables:
-            for row in table:
-                csvwriter.writerow([row])
+            formatted_table = format_table_for_csv(table)
+            for row in formatted_table:
+                csvwriter.writerow(row)
 
 # Directory containing the PDF files
 pdf_dir = 'timetable'
@@ -72,7 +101,7 @@ for filename in os.listdir(pdf_dir):
         pdf_path = os.path.join(pdf_dir, filename)
         odd_tables, even_tables = extract_tables_from_pdf(pdf_path)
 
-        # Filter out any rows containing 'D'
+        # Filter out any rows containing 'D' or specific sentences
         odd_tables = [filter_table(table) for table in odd_tables]
         even_tables = [filter_table(table) for table in even_tables]
 
