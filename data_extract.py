@@ -55,10 +55,16 @@ def format_table_for_csv(table):
         
         # Split the row by whitespace to create columns, handling special cases
         formatted_row = re.split(r'\s+', row)
-        formatted_row = split_time_entries(formatted_row)
         
-        # Remove large numbers that do not fit the time format
-        formatted_row = [entry for entry in formatted_row if not re.match(r'^\d{3,}$', entry)]
+        # Combine the first two strings if both are strings
+        if len(formatted_row) > 1 and all(not re.match(r'^\d', entry) for entry in formatted_row[:2]):
+            formatted_row[0] = formatted_row[0] + " " + formatted_row.pop(1)
+        
+        # Filter out entries that are purely numeric and do not contain colons
+        formatted_row = [entry for entry in formatted_row if ':' in entry or not re.match(r'^\d+$', entry)]
+        
+        # Further split concatenated time entries
+        formatted_row = split_time_entries(formatted_row)
         
         formatted_table.append(formatted_row)
     return formatted_table

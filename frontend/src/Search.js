@@ -9,13 +9,19 @@ function Search() {
   const [results, setResults] = useState(null);
 
   const handleSearch = async () => {
+    if (searchType === 'station' && (!from || !to)) {
+      setResults({ error: 'Please provide both from and to stations' });
+      return;
+    }
+  
     let query = '';
     if (searchType === 'station') {
-      query = `line=${busNumber}.csv&station=${from}`; // Assuming busNumber is the line name
+      query = `line=${busNumber}.csv&startStation=${from}&endStation=${to}`;
     } else {
-      query = `line=${busNumber}.csv&station=${from}`; // Update this to match the correct query for bus number search
+      // Adjust if necessary for bus number search
+      query = `line=${busNumber}.csv&startStation=${from}&endStation=${to}`;
     }
-
+  
     try {
       const response = await fetch(`http://localhost:3000/bus-times?${query}`);
       const data = await response.json();
@@ -24,7 +30,7 @@ function Search() {
       console.error('Error fetching bus times:', error);
       setResults({ error: 'Failed to fetch bus times' });
     }
-  };
+  };  
 
   return (
     <div className="Search">
