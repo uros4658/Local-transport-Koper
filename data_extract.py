@@ -1,6 +1,6 @@
 import PyPDF2
 import re
-import csv
+import sqlite3
 import os
 
 def extract_tables_from_pdf(pdf_path):
@@ -47,7 +47,7 @@ def filter_table(table):
     # Filter out any rows containing 'D' or specific sentences
     return [row for row in table if 'D' not in row and not re.match(r'.*Režim obratovanja.*', row) and not re.match(r'^\d{3,}$', row)]
 
-def format_table_for_csv(table):
+def format_table_for_db(table):
     formatted_table = []
     for row in table:
         # Replace incorrectly split station names
@@ -81,40 +81,54 @@ def split_time_entries(row):
             new_row.append(entry)
     return new_row
 
-def write_combined_tables_to_csv(odd_tables, even_tables, file_path):
-    # Combine odd and even tables
-    combined_tables = odd_tables + even_tables
+def insert_data_to_db(odd_tables, even_tables, conn):
+    cursor = conn.cursor()
     
-    # Write combined tables to a single CSV file
-    with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
-        csvwriter = csv.writer(csvfile)
-        for table in combined_tables:
-            formatted_table = format_table_for_csv(table)
-            for row in formatted_table:
-                csvwriter.writerow(row)
+    for table in odd_tables + even_tables:
+        for row in table:
+            station_name = row[0]
+            times = ','.join(row[1:])
+            cursor.execute("""
+                INSERT INTO schedules (station_name, times)
+                VALUES (?, ?)
+            """, (station_name, times))
+    
+    conn.commit()
 
-# Directory containing the PDF files
-pdf_dir = 'timetable'
+def main():
+    pdf_dir = 'timetable'  # Directory containing the PDF files
+    db_path = 'database/schedules.db'  # Ensure this path exists
+    
+    # Create the database directory if it doesn't exist
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    
+    # Connect to SQLite database
+    conn = sqlite3.connect(db_path)
+    
+    # Create the schedules table if it doesn't exist
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            station_name TEXT,
+            times TEXT
+        )
+    """)
+    
+    # Iterate through all PDF files in the directory
+    for filename in os.listdir(pdf_dir):
+        if filename.endswith('.pdf'):
+            pdf_path = os.path.join(pdf_dir, filename)
+            odd_tables, even_tables = extract_tables_from_pdf(pdf_path)
+            
+            # Filter and format the tables for the database
+            odd_tables = [format_table_for_db(filter_table(table)) for table in odd_tables]
+            even_tables = [format_table_for_db(filter_table(table)) for table in even_tables]
+            
+            # Insert data into the database
+            insert_data_to_db(odd_tables, even_tables, conn)
+    
+    # Close the database connection
+    conn.close()
 
-# Directory to save the CSV files
-output_folder = 'timetablescraped'
-if not os.path.exists(output_folder):
-    os.makedirs(output_folder)
-
-# Process each PDF file in the directory
-for filename in os.listdir(pdf_dir):
-    if filename.endswith('.pdf'):
-        pdf_path = os.path.join(pdf_dir, filename)
-        odd_tables, even_tables = extract_tables_from_pdf(pdf_path)
-
-        # Filter out any rows containing 'D' or specific sentences
-        odd_tables = [filter_table(table) for table in odd_tables]
-        even_tables = [filter_table(table) for table in even_tables]
-
-        # Generate base name without extension
-        base_name = os.path.splitext(filename)[0]
-
-        # Write the combined tables to a CSV file
-        write_combined_tables_to_csv(odd_tables, even_tables, os.path.join(output_folder, f'combined_tables_{base_name}.csv'))
-
-print("Tables have been written to the timetablescraped folder.")
+if __name__ == '__main__':
+    main()

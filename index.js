@@ -1,61 +1,53 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { parse } = require('csv-parse');
+const sqlite3 = require('sqlite3').verbose();
+const pdf = require('pdf-parse');
 const app = express();
 const PORT = 3000;
 
-// Function to read and parse CSV files
-const readCSV = (filePath) => {
-  return new Promise((resolve, reject) => {
-    const data = [];
-    const parser = fs.createReadStream(filePath).pipe(parse({
-      columns: true,
-      delimiter: ',',
-      skip_records_with_error: true,  // Skip rows with errors
-    }));
+const DATABASE_PATH = path.join(__dirname, 'database', 'bus_schedule.db');
 
-    parser.on('readable', function () {
-      let record;
-      while (record = parser.read()) {
-        data.push(record);
+const db = new sqlite3.Database(DATABASE_PATH, (err) => {
+  if (err) {
+    console.error('Error opening database', err);
+  } else {
+    console.log('Connected to database');
+  }
+});
+
+const loadBusSchedules = () => {
+  const directoryPath = path.join(__dirname, 'timetable');
+  const files = fs.readdirSync(directoryPath);
+  const pdfFiles = files.filter(file => file.endsWith('.pdf'));
+  
+  pdfFiles.forEach(file => {
+    const filePath = path.join(directoryPath, file);
+    const busNumber = path.basename(file, path.extname(file));
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        console.error('Error reading PDF file', err);
+        return;
       }
+      pdf(data).then(content => {
+        // Process the PDF content to extract the bus schedule
+        // Assuming PDF content is in a table format, implement your logic to extract schedule
+        console.log(`Loaded schedule for bus number: ${busNumber}`);
+        console.log(content.text); // Use appropriate parsing
+        // You can store the extracted data into the database here
+      });
     });
-
-    parser.on('end', () => resolve(data));
-    parser.on('error', (err) => reject(err));
   });
 };
 
-// Load all bus schedules into memory
-const loadBusSchedules = async () => {
-  const directoryPath = path.join(__dirname, 'timetablescraped');
-  const files = fs.readdirSync(directoryPath);
-  const csvFiles = files.filter(file => file.endsWith('.csv'));
-  const schedules = {};
+loadBusSchedules();
 
-  for (const file of csvFiles) {
-    const filePath = path.join(directoryPath, file);
-    schedules[file] = await readCSV(filePath);
-  }
-
-  return schedules;
-};
-
-// Initialize bus schedules
-let busSchedules = {};
-loadBusSchedules().then((schedules) => {
-  busSchedules = schedules;
-  console.log('Bus schedules loaded:', Object.keys(busSchedules));
-});
-
-// Helper function to find the time for a given station
 const findTimeForStation = (schedule, station, directionCheck = false) => {
   const times = [];
   let isReversed = false;
 
   for (const row of schedule) {
-    const stationName = row.Station || row[Object.keys(row)[0]]; // Adjust based on CSV structure
+    const stationName = row.Station || row[Object.keys(row)[0]];
     const timeEntries = Object.values(row).filter(entry => /\d{1,2}:\d{2}/.test(entry));
 
     if (stationName === station) {
@@ -70,43 +62,35 @@ const findTimeForStation = (schedule, station, directionCheck = false) => {
 };
 
 app.get('/bus-times', (req, res) => {
-  const { line, startStation, endStation } = req.query;
+  const { startStation, endStation } = req.query;
 
-  console.log('Received query:', req.query);
-
-  if (!line || !startStation || !endStation) {
-    return res.status(400).json({ error: 'Please provide line, startStation, and endStation parameters' });
+  if (!startStation || !endStation) {
+    return res.status(400).json({ error: 'Please provide startStation and endStation parameters' });
   }
 
-  const schedule = busSchedules[line];
-  if (!schedule) {
-    return res.status(404).json({ error: 'Bus line not found' });
+  // Assuming you have loaded schedule data from PDFs to a variable `schedules`
+  const schedules = []; // Replace with actual schedule data
+
+  let result = null;
+  for (const schedule of schedules) {
+    const startTimeResult = findTimeForStation(schedule, startStation, true);
+    const endTimeResult = findTimeForStation(schedule, endStation);
+
+    if (!startTimeResult.isReversed && startTimeResult.times.length > 0 && endTimeResult.times.length > 0) {
+      result = {
+        busNumber: schedule.busNumber, // Include the bus number from the schedule
+        startTime: startTimeResult.times[0],
+        endTime: endTimeResult.times[0],
+      };
+      break;
+    }
   }
 
-  const startTimeResult = findTimeForStation(schedule, startStation, true);
-  const endTimeResult = findTimeForStation(schedule, endStation);
-
-  if (startTimeResult.isReversed) {
-    return res.status(400).json({ error: 'Route is going in the wrong direction' });
+  if (!result) {
+    return res.status(404).json({ error: 'No valid bus route found for the given stations' });
   }
 
-  if (startTimeResult.times.length === 0 || endTimeResult.times.length === 0) {
-    return res.status(404).json({ error: 'Start or end station not found on the provided bus line' });
-  }
-
-  const currentTime = new Date();
-  const currentHours = currentTime.getHours();
-  const currentMinutes = currentTime.getMinutes();
-  const currentFormattedTime = `${currentHours}:${currentMinutes < 10 ? '0' + currentMinutes : currentMinutes}`;
-
-  const validStartTime = startTimeResult.times.find(time => time >= currentFormattedTime);
-  const validEndTime = endTimeResult.times.find(time => time > validStartTime);
-
-  if (!validStartTime || !validEndTime) {
-    return res.status(404).json({ error: 'No valid start or end times found' });
-  }
-
-  return res.json({ startTime: validStartTime, endTime: validEndTime });
+  res.json(result);
 });
 
 app.listen(PORT, () => {

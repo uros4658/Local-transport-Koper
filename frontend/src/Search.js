@@ -5,23 +5,16 @@ function Search() {
   const [searchType, setSearchType] = useState('station');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [busNumber, setBusNumber] = useState('');
   const [results, setResults] = useState(null);
 
   const handleSearch = async () => {
-    if (searchType === 'station' && (!from || !to)) {
-      setResults({ error: 'Please provide both from and to stations' });
+    if (!from || !to) {
+      setResults({ error: 'Please provide startStation and endStation parameters' });
       return;
     }
-  
-    let query = '';
-    if (searchType === 'station') {
-      query = `line=${busNumber}.csv&startStation=${from}&endStation=${to}`;
-    } else {
-      // Adjust if necessary for bus number search
-      query = `line=${busNumber}.csv&startStation=${from}&endStation=${to}`;
-    }
-  
+
+    let query = `startStation=${from}&endStation=${to}`;
+
     try {
       const response = await fetch(`http://localhost:3000/bus-times?${query}`);
       const data = await response.json();
@@ -30,7 +23,7 @@ function Search() {
       console.error('Error fetching bus times:', error);
       setResults({ error: 'Failed to fetch bus times' });
     }
-  };  
+  };
 
   return (
     <div className="Search">
@@ -48,7 +41,6 @@ function Search() {
         onChange={(e) => setSearchType(e.target.value)}
       >
         <option value="station">Station</option>
-        <option value="busNumber">Bus Number</option>
       </select>
 
       {searchType === 'station' && (
@@ -72,19 +64,6 @@ function Search() {
         </div>
       )}
 
-      {searchType === 'busNumber' && (
-        <div>
-          <label htmlFor="busNumber">Bus Number:</label>
-          <input
-            type="text"
-            id="busNumber"
-            name="busNumber"
-            value={busNumber}
-            onChange={(e) => setBusNumber(e.target.value)}
-          />
-        </div>
-      )}
-
       <button onClick={handleSearch}>Search</button>
       
       {results && (
@@ -92,7 +71,11 @@ function Search() {
           {results.error ? (
             <p>{results.error}</p>
           ) : (
-            <pre>{JSON.stringify(results, null, 2)}</pre>
+            <div>
+              <p>Bus Number: {results.busNumber}</p>
+              <p>Start Time: {results.startTime}</p>
+              <p>End Time: {results.endTime}</p>
+            </div>
           )}
         </div>
       )}
