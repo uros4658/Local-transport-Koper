@@ -72,7 +72,8 @@ function Search() {
             <p>{results.error}</p>
           ) : (
             <div>
-              <p>Bus Number: {results.busNumber}</p>
+              <p>Start Station: {results.startStation}</p>
+              <p>End Station: {results.endStation}</p>
               <p>Start Time: {results.startTime}</p>
               <p>End Time: {results.endTime}</p>
             </div>

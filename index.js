@@ -1,12 +1,10 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
-const pdf = require('pdf-parse');
 const app = express();
 const PORT = 3000;
 
-const DATABASE_PATH = path.join(__dirname, 'database', 'bus_schedule.db');
+const DATABASE_PATH = path.join(__dirname, 'database', 'schedules.db');
 
 const db = new sqlite3.Database(DATABASE_PATH, (err) => {
   if (err) {
@@ -16,49 +14,9 @@ const db = new sqlite3.Database(DATABASE_PATH, (err) => {
   }
 });
 
-const loadBusSchedules = () => {
-  const directoryPath = path.join(__dirname, 'timetable');
-  const files = fs.readdirSync(directoryPath);
-  const pdfFiles = files.filter(file => file.endsWith('.pdf'));
-  
-  pdfFiles.forEach(file => {
-    const filePath = path.join(directoryPath, file);
-    const busNumber = path.basename(file, path.extname(file));
-    fs.readFile(filePath, (err, data) => {
-      if (err) {
-        console.error('Error reading PDF file', err);
-        return;
-      }
-      pdf(data).then(content => {
-        // Process the PDF content to extract the bus schedule
-        // Assuming PDF content is in a table format, implement your logic to extract schedule
-        console.log(`Loaded schedule for bus number: ${busNumber}`);
-        console.log(content.text); // Use appropriate parsing
-        // You can store the extracted data into the database here
-      });
-    });
-  });
-};
-
-loadBusSchedules();
-
-const findTimeForStation = (schedule, station, directionCheck = false) => {
-  const times = [];
-  let isReversed = false;
-
-  for (const row of schedule) {
-    const stationName = row.Station || row[Object.keys(row)[0]];
-    const timeEntries = Object.values(row).filter(entry => /\d{1,2}:\d{2}/.test(entry));
-
-    if (stationName === station) {
-      if (directionCheck && times.length > 0) {
-        isReversed = true;
-        break;
-      }
-      times.push(...timeEntries);
-    }
-  }
-  return { times, isReversed };
+const getCurrentTime = () => {
+  const now = new Date();
+  return `${now.getHours()}:${now.getMinutes()}`;
 };
 
 app.get('/bus-times', (req, res) => {
@@ -68,29 +26,54 @@ app.get('/bus-times', (req, res) => {
     return res.status(400).json({ error: 'Please provide startStation and endStation parameters' });
   }
 
-  // Assuming you have loaded schedule data from PDFs to a variable `schedules`
-  const schedules = []; // Replace with actual schedule data
+  const currentTime = getCurrentTime();
 
-  let result = null;
-  for (const schedule of schedules) {
-    const startTimeResult = findTimeForStation(schedule, startStation, true);
-    const endTimeResult = findTimeForStation(schedule, endStation);
-
-    if (!startTimeResult.isReversed && startTimeResult.times.length > 0 && endTimeResult.times.length > 0) {
-      result = {
-        busNumber: schedule.busNumber, // Include the bus number from the schedule
-        startTime: startTimeResult.times[0],
-        endTime: endTimeResult.times[0],
-      };
-      break;
+  db.all(`
+    SELECT * FROM schedules 
+    WHERE station_name = ? 
+      AND times LIKE ? 
+    ORDER BY id`, [startStation, `%${currentTime}%`], (err, rows) => {
+    if (err) {
+      console.error('Error fetching data', err);
+      return res.status(500).json({ error: 'Failed to fetch bus times' });
     }
-  }
 
-  if (!result) {
-    return res.status(404).json({ error: 'No valid bus route found for the given stations' });
-  }
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'No buses available at this time' });
+    }
 
-  res.json(result);
+    for (const row of rows) {
+      const times = row.times.split(',');
+      for (const time of times) {
+        if (time >= currentTime) {
+          db.all(`
+            SELECT * FROM schedules 
+            WHERE bus_number = ? 
+              AND station_name = ? 
+              AND id > ? 
+            ORDER BY id`, [row.bus_number, endStation, row.id], (err, endRows) => {
+            if (err) {
+              console.error('Error fetching data', err);
+              return res.status(500).json({ error: 'Failed to fetch bus times' });
+            }
+
+            if (endRows.length === 0) {
+              return res.status(404).json({ error: 'No valid bus route found for the given stations' });
+            }
+
+            return res.json({
+              busNumber: row.bus_number,
+              startTime: time,
+              endTime: endRows[0].times.split(',')[0],
+            });
+          });
+          return;
+        }
+      }
+    }
+
+    return res.status(404).json({ error: 'No buses available at this time' });
+  });
 });
 
 app.listen(PORT, () => {
